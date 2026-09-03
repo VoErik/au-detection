@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import random
-from typing import Callable, Sequence
+from typing import Callable, Optional, Sequence
 
 import numpy as np
 import torch
@@ -45,3 +45,84 @@ def denormalize(t: torch.Tensor, mean: Sequence[float] = IMAGENET_MEAN,
     m = torch.tensor(tuple(mean)).view(3, 1, 1)
     s = torch.tensor(tuple(std)).view(3, 1, 1)
     return (t * s + m).clamp(0.0, 1.0)
+
+
+# --------------------------------------------------------------------------- #
+# Logging, checkpoints, experiment artifacts                                  #
+# --------------------------------------------------------------------------- #
+
+import json
+import logging
+from datetime import datetime
+from pathlib import Path
+
+
+class Logger:
+    """Thin wrapper over logging: console + optional file, no duplicate handlers."""
+
+    def __init__(self, name: str, level: int = logging.INFO, logfile=None):
+        self.logger = logging.getLogger(name)
+        if not self.logger.handlers:
+            self.logger.setLevel(level)
+            fmt = logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s", "%H:%M:%S")
+            sh = logging.StreamHandler()
+            sh.setFormatter(fmt)
+            self.logger.addHandler(sh)
+            if logfile is not None:
+                fh = logging.FileHandler(logfile)
+                fh.setFormatter(fmt)
+                self.logger.addHandler(fh)
+        self.logger.propagate = False
+
+    def get_logger(self) -> logging.Logger:
+        return self.logger
+
+
+def save_model(model, path) -> None:
+    """Save a model's weights (state_dict)."""
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+    torch.save(model.state_dict(), path)
+
+
+def load_model(model, path, *, map_location="cpu"):
+    """Load weights (state_dict) into an already-built model, in place."""
+    model.load_state_dict(torch.load(path, map_location=map_location))
+    return model
+
+
+class Experiment:
+    """One experiment = one directory holding every artifact: the exact config used
+    (config.yaml), a run.log, model checkpoints, metrics, and figures.
+
+        exp = Experiment(cfg, name="pfr_baseline")
+        log = exp.log                       # logs to console AND exp.dir/run.log
+        exp.save_model(model, "model_fold0.pt")
+        exp.save_metrics(df, summary)
+        exp.save_figure(fig, "au_f1.png")
+    """
+
+    def __init__(self, config, root: str = "runs", name: Optional[str] = None):
+        stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+        label = name or f"{config.task}_{config.model}"
+        self.dir = Path(root) / f"{label}_{stamp}"
+        self.dir.mkdir(parents=True, exist_ok=True)
+        config.to_yaml(self.dir / "config.yaml")               # copy the config used
+        self.log = Logger(label, logfile=self.dir / "run.log").get_logger()
+        self.log.info(f"experiment dir: {self.dir}")
+
+    def path(self, *parts) -> Path:
+        return self.dir.joinpath(*parts)
+
+    def save_model(self, model, name: str = "model.pt") -> Path:
+        p = self.dir / name
+        save_model(model, p)
+        return p
+
+    def save_metrics(self, df, summary: dict) -> None:
+        df.to_csv(self.dir / "metrics.csv")
+        (self.dir / "summary.json").write_text(json.dumps(summary, indent=2))
+
+    def save_figure(self, fig, name: str = "figure.png") -> Path:
+        p = self.dir / name
+        fig.savefig(p, dpi=120, bbox_inches="tight")
+        return p

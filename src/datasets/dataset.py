@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import OrderedDict
 from pathlib import Path
 from typing import Callable, Optional, Sequence
 
@@ -29,7 +30,7 @@ class AUDataset(Dataset):
     def __init__(self, units: Sequence[Unit], crops_dir, au_names: Sequence[str], *,
                  unit_type: str = "frame", window_len: int = 16,
                  window_mode: str = "causal", transform: Optional[Callable] = None,
-                 return_meta: bool = False):
+                 return_meta: bool = False, max_open: int = 64):
         if unit_type not in ("frame", "window"):
             raise ValueError(f"unit_type must be frame|window, got {unit_type!r}")
         if window_mode not in ("causal", "centered"):
@@ -43,7 +44,15 @@ class AUDataset(Dataset):
         self.window_mode = window_mode
         self.transform = transform or to_chw_float
         self.return_meta = return_meta
-        self._mm: dict[str, np.ndarray] = {}
+        self._mm: OrderedDict = OrderedDict()   # LRU cache of open memmaps
+        self._max_open = max_open
+
+        K = len(self.au_names)
+        bad = [u.unit_id for u in self.units if u.labels.shape[1] != K]
+        if bad:
+            raise ValueError(
+                f"{len(bad)} unit(s) have labels with != {K} columns while au_names has "
+                f"{K} (e.g. {bad[:3]}). Slice labels first: subset_units(units, au_names, kept).")
 
         rows = []
         for ui, u in enumerate(self.units):
@@ -63,6 +72,13 @@ class AUDataset(Dataset):
         if mm is None:
             mm = np.load(self.crops_dir / f"{u.unit_id}.npy", mmap_mode="r")
             self._mm[u.unit_id] = mm
+            while len(self._mm) > self._max_open:            # evict LRU, free its fd
+                _, old = self._mm.popitem(last=False)
+                obj = getattr(old, "_mmap", None)
+                if obj is not None:
+                    obj.close()
+        else:
+            self._mm.move_to_end(u.unit_id)                  # mark most-recently-used
         return mm
 
     def __getitem__(self, i: int):
@@ -81,5 +97,5 @@ class AUDataset(Dataset):
 
     def __getstate__(self):
         state = self.__dict__.copy()
-        state["_mm"] = {}                       # reopen memmaps lazily per worker
+        state["_mm"] = OrderedDict()            # reopen memmaps lazily per worker
         return state

@@ -1,0 +1,31 @@
+task: painfacereader
+painfacereader:
+  root: /home/voigt/data/Datensatz_MSE_Hauptstudie_Loy
+  view: frontal
+disfa: null
+bp4d: null
+img_size: 224
+crop_margin: 0.15
+device: cuda
+window_len: 1
+window_mode: causal
+unit_type: frame
+aus: null
+min_subjects: 5
+min_carrier_frames: 25
+min_prevalence: 0.02
+folds_iter: 5000
+folds_n_restart: 640
+folds_t0: 0.05
+folds_tmin: 0.0001
+model: densenet121
+n_folds: 5
+n_steps: 8000
+eval_every: 1000
+optimizer: adam
+batch_size: 256
+lr: 0.0003
+n_workers: 8
+sampler: none
+block_size: 8
+pos_weight_clip: 10.0

@@ -1,0 +1,45 @@
+# PainFaceReader frame baseline. Values here override AUDetectionConfig defaults;
+# anything omitted keeps its default. Load with: AUDetectionConfig.from_yaml(path).
+
+task: painfacereader
+
+painfacereader:
+  root: /home/voigt/data/Datensatz_MSE_Hauptstudie_Loy
+  view: frontal
+
+# general
+img_size: 224
+crop_margin: 0.15          # used at preprocess time (stabilized-box padding)
+device: cuda               # cpu | cuda | mps
+unit_type: window           # frame | window
+window_len: 16              # 1 = per-frame; >1 = temporal window (for video models)
+window_mode: causal
+
+# AU selection (ignored when a fold file is loaded -- it carries its own kept AUs)
+aus: null                  # e.g. [AU.04, AU.06, AU.07, AU.12] to fix the set; null -> auto
+min_prevalence: 0.02
+min_subjects: 5
+min_carrier_frames: 25
+
+# fold search (simulated annealing)
+folds_iter: 5000
+folds_n_restart: 640
+folds_t0: 0.05
+folds_tmin: 0.0001
+
+# model
+model: densenet121_tcn         # resnet50 | densenet121
+
+# training
+n_folds: 5
+n_steps: 8000
+eval_every: 1000             # eval val macro-F1 (+ save best ckpt) every N steps
+optimizer: adam
+batch_size: 16
+lr: 0.0003
+n_workers: 8
+
+# imbalance handling (thresholds pinned near 1.0 => over-predicting => try relaxing these)
+block_size: 8            # only used when sampler: block
+sampler: block           # stop double-correcting
+pos_weight_clip: 10.0    # moderate positive weight instead of the aggressive 50
