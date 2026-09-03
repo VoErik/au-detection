@@ -11,7 +11,7 @@ painfacereader:
 img_size: 224
 crop_margin: 0.15          # used at preprocess time (stabilized-box padding)
 device: cuda               # cpu | cuda | mps
-unit_type: window           # frame | window
+unit_type: frame           # frame | window
 window_len: 16              # 1 = per-frame; >1 = temporal window (for video models)
 window_mode: causal
 
@@ -28,18 +28,19 @@ folds_t0: 0.05
 folds_tmin: 0.0001
 
 # model
-model: densenet121_tcn         # resnet50 | densenet121
+model: mae_face         # resnet50 | densenet121
 
 # training
 n_folds: 5
 n_steps: 2000
 eval_every: 1000             # eval val macro-F1 (+ save best ckpt) every N steps
 optimizer: adam
-batch_size: 16
+batch_size: 256
 lr: 0.0003
 n_workers: 8
+freeze_backbone: false
 
 # imbalance handling (thresholds pinned near 1.0 => over-predicting => try relaxing these)
 block_size: 8            # only used when sampler: block
-sampler: block           # stop double-correcting
+sampler: none           # stop double-correcting
 pos_weight_clip: 10.0    # moderate positive weight instead of the aggressive 50

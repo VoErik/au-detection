@@ -126,3 +126,31 @@ class Experiment:
         p = self.dir / name
         fig.savefig(p, dpi=120, bbox_inches="tight")
         return p
+
+
+def get_param_groups_llrd(model, base_lr: float, weight_decay: float, layer_decay: float = 0.65):
+    """Groups ViT parameters by depth for Layer-wise LR Decay."""
+    num_layers = len(model.backbone.blocks) if hasattr(model, 'backbone') else 12
+    param_groups = {}
+    
+    for name, param in model.named_parameters():
+        if not param.requires_grad:
+            continue
+            
+        if name.startswith("backbone.patch_embed") or name.startswith("backbone.cls_token") or name.startswith("backbone.pos_embed"):
+            layer_id = 0
+        elif name.startswith("backbone.blocks."):
+            layer_id = int(name.split(".")[2]) + 1
+        else: # fc_norm and head
+            layer_id = num_layers + 1
+            
+        group_lr = base_lr * (layer_decay ** (num_layers + 1 - layer_id))
+        group_wd = 0.0 if len(param.shape) == 1 or name.endswith(".bias") else weight_decay
+        
+        group_name = f"layer_{layer_id}_wd_{group_wd}"
+        if group_name not in param_groups:
+            param_groups[group_name] = {"params": [], "lr": group_lr, "weight_decay": group_wd}
+            
+        param_groups[group_name]["params"].append(param)
+        
+    return list(param_groups.values())

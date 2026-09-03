@@ -135,8 +135,21 @@ def fit(model, train_dataset, val_dataset, au_names: Sequence[str], *,
     torch.backends.cudnn.benchmark = True
     model.train()
     loss_fn = nn.BCEWithLogitsLoss(pos_weight=pos_weight.to(device))
-    opt = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
-    sched = torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=steps, eta_min=lr * lr_min_factor)
+
+    if any("blocks" in n and p.requires_grad for n, p in model.named_parameters()):
+        from src.utils import get_param_groups_llrd
+        opt = torch.optim.AdamW(get_param_groups_llrd(model, base_lr=lr, weight_decay=weight_decay))
+    else:
+        opt = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
+
+    # 10% Linear Warmup into Cosine Decay
+    warmup_steps = max(1, int(steps * 0.1))
+    main_steps = steps - warmup_steps
+    
+    warmup_sched = torch.optim.lr_scheduler.LinearLR(opt, start_factor=1e-6, end_factor=1.0, total_iters=warmup_steps)
+    cosine_sched = torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=main_steps, eta_min=lr * lr_min_factor)
+    sched = torch.optim.lr_scheduler.SequentialLR(opt, schedulers=[warmup_sched, cosine_sched], milestones=[warmup_steps])
+
     scaler = GradScaler("cuda", enabled=use_amp)
     loader = DataLoader(train_dataset, batch_size=batch_size, sampler=sampler,
                         shuffle=(sampler is None), num_workers=num_workers, drop_last=True,
@@ -177,7 +190,7 @@ def fit(model, train_dataset, val_dataset, au_names: Sequence[str], *,
         sched.step()
         v = loss.item()
         ema = v if ema is None else 0.98 * ema + 0.02 * v
-        cur_lr = opt.param_groups[0]["lr"]
+        cur_lr = max(g["lr"] for g in opt.param_groups)
         bar.set_postfix(loss=f"{ema:.3f}", lr=f"{cur_lr:.1e}", data=f"{data_ms:.0f}ms")
 
         if step % eval_every == 0 or step == steps:

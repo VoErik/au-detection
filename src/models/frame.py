@@ -31,8 +31,9 @@ class FrameModel(nn.Module):
         self.freeze_backbone = freeze_backbone
         self.backbone, feat = _build_backbone(backbone, pretrained)
         if freeze_backbone:
-            for p in self.backbone.parameters():
-                p.requires_grad_(False)
+            for n, p in self.backbone.named_parameters():
+                if "fc_norm" not in n: # for mae -- ugly patch for now. TODO
+                    p.requires_grad_(False)
         self.head = (nn.Sequential(nn.Dropout(dropout), nn.Linear(feat, n_classes))
                      if dropout > 0 else nn.Linear(feat, n_classes))
 

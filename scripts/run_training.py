@@ -24,7 +24,7 @@ def load_task_units(cfg):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config", type=str, default="assets/configs/painfacereader.yaml", help="yaml config; omit for defaults")
+    parser.add_argument("--config", type=str, default="assets/configs/painfacereader_mae.yaml", help="yaml config; omit for defaults")
     parser.add_argument("--fold_path", type=str, default="assets/folds/folds_frontal_k5_seed0.json")
     parser.add_argument("--seeds", type=int, nargs="+", default=[0],
                         help="training seeds; one seed = a single k-fold run, several = a seed sweep")

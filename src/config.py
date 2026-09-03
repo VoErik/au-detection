@@ -95,6 +95,7 @@ class AUDetectionConfig:
     batch_size: int = 64
     lr: float = 3e-4
     n_workers: int = 8
+    freeze_backbone: bool = False
 
     # imbalance handling
     sampler: Literal["neutral_active", "none", "block"] = "neutral_active"
